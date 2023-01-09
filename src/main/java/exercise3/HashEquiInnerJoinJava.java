@@ -21,10 +21,8 @@ public class HashEquiInnerJoinJava extends InnerJoinOperation {
 	}
 
 	@Override
-	public int estimatedIOCost(
-		@NotNull Relation leftInputRelation, @NotNull Relation rightInputRelation
-	) {
-		throw new UnsupportedOperationException();
+	public int estimatedIOCost(@NotNull Relation leftInputRelation, @NotNull Relation rightInputRelation) {
+        return 3 * (leftInputRelation.estimatedBlockCount() + rightInputRelation.estimatedBlockCount());
 	}
 
     private List<List<Block>> partitionRelation(int bucketCount, boolean swapped, Relation relation) {
