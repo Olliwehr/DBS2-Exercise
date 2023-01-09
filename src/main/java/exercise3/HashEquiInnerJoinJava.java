@@ -14,9 +14,7 @@ import org.jetbrains.annotations.NotNull;
 @ChosenImplementation(true)
 public class HashEquiInnerJoinJava extends InnerJoinOperation {
 
-	public HashEquiInnerJoinJava(
-		@NotNull BlockManager blockManager, int leftColumnIndex, int rightColumnIndex
-	) {
+	public HashEquiInnerJoinJava(@NotNull BlockManager blockManager, int leftColumnIndex, int rightColumnIndex) {
 		super(blockManager, new JoinAttributePair.EquiJoinAttributePair(leftColumnIndex, rightColumnIndex));
 	}
 
@@ -25,7 +23,7 @@ public class HashEquiInnerJoinJava extends InnerJoinOperation {
         return 3 * (leftInputRelation.estimatedBlockCount() + rightInputRelation.estimatedBlockCount());
 	}
 
-    private List<List<Block>> partitionRelation(int bucketCount, boolean swapped, Relation relation) {
+    private List<List<Block>> partitionRelation(Relation relation, int bucketCount, boolean isLeftRelation) {
         List<List<Block>> relationBuckets = new ArrayList<>(bucketCount);
         for (int i = 0; i < bucketCount; i++) {
             relationBuckets.add(new ArrayList<>());
@@ -40,7 +38,7 @@ public class HashEquiInnerJoinJava extends InnerJoinOperation {
             bucketRepresentatives.add(bucketBlock);
         }
 
-        int columnIndexToHash = swapped ? joinAttributePair.getRightColumnIndex() : joinAttributePair.getLeftColumnIndex();
+        int columnIndexToHash = isLeftRelation ? joinAttributePair.getLeftColumnIndex() : joinAttributePair.getRightColumnIndex();
 
         for (Block blockReference : relation) {
             // Read the next block of the relation into main memory
@@ -89,9 +87,9 @@ public class HashEquiInnerJoinJava extends InnerJoinOperation {
         // 1 block for reading in the relations
         int bucketCount = blockManager.getFreeBlocks() - 1;
 
-        boolean swapped = leftInputRelation.estimatedBlockCount() > rightInputRelation.estimatedBlockCount();
-        Relation smallerRelation = swapped ? rightInputRelation : leftInputRelation;
-        Relation largerRelation = swapped ? leftInputRelation : rightInputRelation;
+        boolean isLeftRelationSmaller = leftInputRelation.estimatedBlockCount() <= rightInputRelation.estimatedBlockCount();
+        Relation smallerRelation = isLeftRelationSmaller ? leftInputRelation : rightInputRelation;
+        Relation largerRelation = isLeftRelationSmaller ? rightInputRelation : leftInputRelation;
 
         // Check for valid relation size using the smaller relation
         // Note that another 1 is subtracted because we need an extra output buffer block when joining later on
@@ -99,8 +97,8 @@ public class HashEquiInnerJoinJava extends InnerJoinOperation {
             throw new RelationSizeExceedsCapacityException();
         }
 
-        List<List<Block>> smallerRelationBuckets = partitionRelation(bucketCount, swapped, smallerRelation);
-        List<List<Block>> largerRelationBuckets = partitionRelation(bucketCount, swapped, largerRelation);
+        List<List<Block>> smallerRelationBuckets = partitionRelation(smallerRelation, bucketCount, isLeftRelationSmaller);
+        List<List<Block>> largerRelationBuckets = partitionRelation(largerRelation, bucketCount, !isLeftRelationSmaller);
 
         TupleAppender tupleAppender = new TupleAppender(outputRelation.getBlockOutput());
         for (int i = 0; i < bucketCount; i++) {
