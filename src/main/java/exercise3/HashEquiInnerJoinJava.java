@@ -2,6 +2,7 @@ package exercise3;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import de.hpi.dbs2.ChosenImplementation;
 import de.hpi.dbs2.dbms.*;
@@ -103,7 +104,67 @@ public class HashEquiInnerJoinJava extends InnerJoinOperation {
         List<List<Block>> smallerRelationBuckets = partitionRelation(bucketCount, swapped, smallerRelation);
         List<List<Block>> largerRelationBuckets = partitionRelation(bucketCount, swapped, largerRelation);
 
-        // TODO:
-		//  - join hashed blocks
+        TupleAppender tupleAppender = new TupleAppender(outputRelation.getBlockOutput());
+        for (int i = 0; i < bucketCount; i++) {
+            List<Block> smallerRelationBucket = smallerRelationBuckets.get(i);
+            List<Block> largerRelationBucket = largerRelationBuckets.get(i);
+
+
+            List<Block> loadedSmallerRelationBucket = new ArrayList<>();
+            for (Block smallerRelationBucketBlockRef : smallerRelationBucket) {
+                // Load all blocks of the bucket of the smaller relation in main memory
+                loadedSmallerRelationBucket.add(blockManager.load(smallerRelationBucketBlockRef));
+            }
+
+
+            for (Block largerRelationBucketBlockRef: largerRelationBucket) {
+                // Load the next block of the bucket of the larger relation in main memory
+                Block loadedLargerRelationBlock = blockManager.load(largerRelationBucketBlockRef);
+
+
+                // Do the actual join
+                for (Block loadedSmallerRelationBlock : loadedSmallerRelationBucket) {
+                    joinBlocks(loadedSmallerRelationBlock, loadedLargerRelationBlock, outputRelation.getColumns(), tupleAppender);
+                }
+
+                // Release the loaded block of the bucket of the larger relation
+                blockManager.release(loadedLargerRelationBlock, false);
+            }
+
+            for (Block loadedSmallerRelationBlock : loadedSmallerRelationBucket) {
+                // Release all loaded blocks of the bucket of the smaller relation
+                blockManager.release(loadedSmallerRelationBlock, false);
+            }
+        }
+        tupleAppender.close();
 	}
+
+    class TupleAppender implements AutoCloseable, Consumer<Tuple> {
+
+        BlockOutput blockOutput;
+
+        TupleAppender(BlockOutput blockOutput) {
+            this.blockOutput = blockOutput;
+        }
+
+        Block outputBlock = getBlockManager().allocate(true);
+
+        @Override
+        public void accept(Tuple tuple) {
+            if (outputBlock.isFull()) {
+                blockOutput.move(outputBlock);
+                outputBlock = getBlockManager().allocate(true);
+            }
+            outputBlock.append(tuple);
+        }
+
+        @Override
+        public void close() {
+            if (!outputBlock.isEmpty()) {
+                blockOutput.move(outputBlock);
+            } else {
+                getBlockManager().release(outputBlock, false);
+            }
+        }
+    }
 }
