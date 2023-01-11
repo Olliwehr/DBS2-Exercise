@@ -9,7 +9,7 @@ interface Operation {
     val blockManager: BlockManager
 
     /**
-     * Relation is larger than the given sort algorithm can handle.
+     * Relation is larger than the given algorithm can handle in memory.
      */
     class RelationSizeExceedsCapacityException : IllegalArgumentException()
 }
